@@ -128,7 +128,7 @@ function drawRays() {
   const w = W(), h = H();
   ctx.clearRect(0, 0, w, h);
   CHIME_DATA.forEach((d, i) => {
-    if (lit[i] < 0.03) return;
+    if (ambient[i] < 0.03) return;
     const baseX = d.x * w;
     const a = angles[i];
     const tipX = baseX + Math.sin(a) * (d.len * 1.3 + TOP_Y);
@@ -140,7 +140,7 @@ function drawRays() {
       ctx.translate(tipX, tipY);
       ctx.rotate(spread);
       const grad = ctx.createLinearGradient(0, 0, 0, -len);
-      grad.addColorStop(0, `rgba(180,215,255,${lit[i] * 0.45})`);
+      grad.addColorStop(0, `rgba(180,215,255, ${ambient[i] * 0.45})`);
       grad.addColorStop(1, `rgba(180,215,255,0)`);
       ctx.strokeStyle = grad;
       ctx.lineWidth = 1.2;
@@ -157,18 +157,38 @@ const GRAVITY = 0.12, DAMPING = 0.96, RESTORE = 0.05;
 
 function tick() {
   let anyActive = false;
+
   angles = angles.map((a, i) => {
     vels[i] += -RESTORE * a - GRAVITY * Math.sin(a);
     vels[i] *= DAMPING;
+
     const na = a + vels[i];
     const speed = Math.abs(vels[i]);
-    lit[i] = Math.min(1, lit[i] * 0.97 + speed * 0.5);
-    if (Math.abs(vels[i]) > 0.0005 || Math.abs(na) > 0.0005 || lit[i] > 0.01) anyActive = true;
+
+    // Fast-fading light inside the chime
+    lit[i] = Math.min(1, lit[i] * 0.88 + speed * 0.4);
+
+    // Slower fading glow for rays and background
+    ambient[i] = Math.min(1, ambient[i] * 0.97 + speed * 0.5);
+
+    if (
+      Math.abs(vels[i]) > 0.0005 ||
+      Math.abs(na) > 0.0005 ||
+      lit[i] > 0.01 ||
+      ambient[i] > 0.01
+    ) {
+      anyActive = true;
+    }
+
     return na;
   });
+
   updatePositions();
   drawRays();
-  glowOverlay.style.opacity = lit.some(l => l > 0.05) ? '1' : '0';
+
+  glowOverlay.style.opacity =
+    ambient.some(a => a > 0.05) ? '1' : '0';
+
   animId = anyActive ? requestAnimationFrame(tick) : null;
 }
 
