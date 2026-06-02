@@ -67,9 +67,13 @@ body {
 
 /*
  * The pill shape (border-radius: 7px on a 14px-wide element).
- * Position, height, background, and box-shadow are set inline by JS
- * so they can be animated per-frame.
+ * Position, height, background, and transform are set inline by JS.
  * transform-origin:top center makes rotation pivot at the hanging point.
+ *
+ * The glow effect is handled by a child .chime-glow overlay whose opacity
+ * JS sets each frame. CSS transitions on opacity give a smooth fade-in/out
+ * rather than an instant snap. This works because opacity is a first-class
+ * animatable property — no @property registration needed.
  */
 .chime {
   position: absolute;
@@ -77,8 +81,33 @@ body {
   border-radius: 7px;
   transform-origin: top center;
   cursor: grab;
-  transition: background 0.4s; /* smooth colour change when glow fades */
+  overflow: hidden; /* clip the glow overlay to the pill shape */
 }
+
+/*
+ * Full-size overlay inside each chime tube.
+ * Renders the bright gradient + inner highlight that represents the glow.
+ * opacity is written by JS each frame (0 = invisible, 1 = full glow).
+ * transition:opacity gives the smooth fade-in on hit and fade-out at rest.
+ */
+.chime-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease-out;
+  background: linear-gradient(
+    to right,
+    hsl(210, 60%, 43%),
+    hsl(200, 95%, 73%),
+    hsl(210, 60%, 43%)
+  );
+  box-shadow:
+    inset 0 0 18px rgba(220, 240, 255, 0.85),
+    0 0 22px rgba(160, 210, 255, 0.65),
+    0 0 48px rgba(140, 195, 255, 0.3);
+  }
 
 /* ── 6. Hint text ──────────────────────────────────────────────────────────── */
 

@@ -51,7 +51,7 @@ const TOP_Y = 60;
 
 let angles  = CHIME_DATA.map(() => 0); // current swing angle (radians)
 let vels    = CHIME_DATA.map(() => 0); // angular velocity (radians/frame)
-let lit     = CHIME_DATA.map(() => 0); // triggered flash glow (0–1): set to 1 on hit, then decays
+let lit     = CHIME_DATA.map(() => 0); // triggered flash glow (0–1): set to 1 on hit, decays slowly; CSS transition on .chime-glow opacity gives smooth fade-in/out
 let ambient = CHIME_DATA.map(() => 0); // slower-decaying ray/bg glow (0–1)
 
 // ── Physics constants ────────────────────────────────────────────────────────
@@ -149,6 +149,13 @@ function buildChimes() {
     chime.style.cssText = `width:14px; height:${d.len}px; background:${d.color}; left:-7px; top:${d.len * 0.3}px;`;
     chime.dataset.i = i;
 
+    // Inner glow layer: a full-size child whose opacity is driven by --glow.
+    // CSS transitions on opacity give the smooth fade-in/out.
+    const glow = document.createElement('div');
+    glow.className = 'chime-glow';
+
+    chime.appendChild(glow);
+
     // Attach group-drag handlers to each tube
     chime.addEventListener('pointerdown',  e => onChimePointerDown(e, chime));
     chime.addEventListener('pointerup',    e => onChimePointerUp(e));
@@ -157,7 +164,7 @@ function buildChimes() {
     wrap.appendChild(str);
     wrap.appendChild(chime);
     root.appendChild(wrap);
-    chimeEls.push({ wrap, chime });
+    chimeEls.push({ wrap, chime, glow });
   });
 
   updatePositions();
@@ -168,6 +175,11 @@ function buildChimes() {
 /**
  * Apply the current angles and glow values to every chime's DOM element.
  * Called once per animation frame.
+ *
+ * Glow is applied by setting opacity on the .chime-glow child overlay rather
+ * than overriding background/boxShadow directly. This lets the CSS
+ * `transition: opacity` handle smooth fade-in and fade-out automatically —
+ * JS only needs to write a number; the browser interpolates the visual.
  */
 function updatePositions() {
   const w = W();
@@ -179,24 +191,8 @@ function updatePositions() {
     el.wrap.style.top       = `${TOP_Y}px`;
     el.wrap.style.transform = `rotate(${angles[i]}rad)`;
 
-    const l = lit[i];
-    if (l > 0.01) {
-      const brightness = 55 + l * 30;           // shifts from ~55% (rest) up to ~85% (peak flash)
-      el.chime.style.background = `
-        linear-gradient(
-          to right,
-          hsl(210, 60%, ${brightness - 12}%),
-          hsl(200, 95%, ${brightness + 18}%),
-          hsl(210, 60%, ${brightness - 12}%)
-        )`;
-      el.chime.style.boxShadow = `
-        inset 0 0 ${8  + l * 28}px rgba(220, 240, 255, ${l * 0.9}),
-        0 0 ${10 + l * 30}px rgba(160, 210, 255, ${l * 0.7}),
-        0 0 ${20 + l * 50}px rgba(140, 195, 255, ${l * 0.35})`;
-    } else {
-      el.chime.style.background  = d.color;
-      el.chime.style.boxShadow   = 'none';
-    }
+    // Set opacity on the inner glow overlay — CSS transition handles the fade.
+    el.glow.style.opacity = lit[i].toFixed(3);
   });
 }
 
@@ -258,7 +254,7 @@ function tick() {
     const na    = a + vels[i];
     const speed = Math.abs(vels[i]);
 
-    lit[i]     = lit[i] * 0.96;                                  // pure decay: flash fades on its own
+    lit[i]     = lit[i] * 0.98;                                  // slow decay; CSS transition smooths the fade-out visually
     ambient[i] = Math.min(1, ambient[i] * 0.97 + speed * 0.50); // slow ray glow, still speed-driven
 
     if (Math.abs(vels[i]) > 0.0005 || Math.abs(na) > 0.0005 ||
