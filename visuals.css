@@ -1,16 +1,47 @@
-* {
+/*
+ * visuals.css — Wind Chime
+ *
+ * Styles the full-viewport scene and the chime elements built by JS.
+ * No layout logic lives here; all positioning and transforms are applied
+ * inline by functionality.js.
+ *
+ * Table of contents
+ * ─────────────────
+ *   1. Reset
+ *   2. Body
+ *   3. Scene (#scene)
+ *   4. Chimes container (#chimes-root)
+ *   5. Chime tube (.chime)
+ *   6. Hint text (#hint)
+ *   7. Ambient glow overlay (#glow-overlay)
+ *   8. Ray canvas (#rays-canvas)
+ */
+
+/* ── 1. Reset ──────────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+/* ── 2. Body ───────────────────────────────────────────────────────────────── */
+
 body {
-  background: #1a2030;
-  margin: 0;
+  background: #1a2030; /* deep blue-grey night sky colour */
   font-family: sans-serif;
   min-height: 100vh;
 }
 
+/* ── 3. Scene ──────────────────────────────────────────────────────────────── */
+
+/*
+ * Fixed so it always fills the viewport regardless of document scroll.
+ * overflow:visible lets chimes swing outside bounds without clipping.
+ * pointer-events:auto ensures it catches all interaction.
+ */
 #scene {
   position: fixed;
   inset: 0;
@@ -20,24 +51,42 @@ body {
   pointer-events: auto;
 }
 
+/* ── 4. Chimes container ───────────────────────────────────────────────────── */
+
+/*
+ * touch-action:none prevents browser scroll/zoom gestures from
+ * interfering with chime dragging on touch devices.
+ */
 #chimes-root {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   touch-action: none;
 }
 
+/* ── 5. Chime tube ─────────────────────────────────────────────────────────── */
+
+/*
+ * The pill shape (border-radius: 7px on a 14px-wide element).
+ * Position, height, background, and box-shadow are set inline by JS
+ * so they can be animated per-frame.
+ * transform-origin:top center makes rotation pivot at the hanging point.
+ */
 .chime {
   position: absolute;
   width: 14px;
   border-radius: 7px;
   transform-origin: top center;
   cursor: grab;
-  transition: background 0.4s;
+  transition: background 0.4s; /* smooth colour change when glow fades */
 }
 
+/* ── 6. Hint text ──────────────────────────────────────────────────────────── */
+
+/*
+ * Centered at the bottom of the scene.
+ * pointer-events:none so it never blocks chime interaction.
+ * Faded to opacity:0 by JS on first interaction via transition.
+ */
 #hint {
   position: absolute;
   bottom: 16px;
@@ -49,6 +98,13 @@ body {
   transition: opacity 0.5s;
 }
 
+/* ── 7. Ambient glow overlay ───────────────────────────────────────────────── */
+
+/*
+ * A radial gradient centred on the upper-middle of the scene.
+ * opacity toggled between 0 and 1 by JS (with a 0.6s transition)
+ * whenever any chime has significant motion.
+ */
 #glow-overlay {
   position: absolute;
   inset: 0;
@@ -58,11 +114,18 @@ body {
   transition: opacity 0.6s;
   background: radial-gradient(
     ellipse at 50% 30%,
-    rgba(180,210,255,0.12) 0%,
+    rgba(180, 210, 255, 0.12) 0%,
     transparent 70%
   );
 }
 
+/* ── 8. Ray canvas ─────────────────────────────────────────────────────────── */
+
+/*
+ * Overlaid on the scene at full size.
+ * pointer-events:none so it never intercepts mouse/touch input.
+ * Sized to match the scene via JS on resize.
+ */
 #rays-canvas {
   position: absolute;
   inset: 0;

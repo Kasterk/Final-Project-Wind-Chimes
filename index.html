@@ -4,19 +4,54 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wind Chime</title>
-
+  <!--
+    visuals.css   – layout, colours, and chime element styles
+    functionality.js – physics simulation, DOM construction, event handling
+  -->
   <link rel="stylesheet" href="visuals.css" />
 </head>
 <body>
 
+<!--
+  #scene
+  ──────
+  Full-viewport interaction surface. Receives click and pointer events for
+  both individual-chime swinging and whole-group dragging.
+-->
 <div id="scene">
+
+  <!--
+    #glow-overlay
+    ─────────────
+    A radial-gradient div that fades in while any chime is moving, giving a
+    soft ambient light effect behind the chimes. Toggled via opacity in JS.
+  -->
   <div id="glow-overlay"></div>
 
+  <!--
+    #rays-canvas
+    ────────────
+    Transparent <canvas> that sits above the scene. JS draws light rays
+    emanating from each chime's tip when it is swinging.
+  -->
   <canvas id="rays-canvas"></canvas>
 
+  <!--
+    #chimes-root
+    ────────────
+    Empty container populated at runtime by buildChimes(). Translated
+    horizontally when the user performs a group-drag.
+  -->
   <div id="chimes-root"></div>
 
+  <!--
+    #hint
+    ─────
+    Instructional copy shown until the first user interaction, then faded
+    out by hideHint() in JS.
+  -->
   <p id="hint">gently touch or drag the chimes</p>
+
 </div>
 
 <script src="functionality.js"></script>
