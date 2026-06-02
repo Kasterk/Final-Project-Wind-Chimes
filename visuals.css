@@ -1,0 +1,72 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #1a2030;
+  margin: 0;
+  font-family: sans-serif;
+  min-height: 100vh;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  overflow: visible;
+  background: transparent;
+  user-select: none;
+  pointer-events: auto;
+}
+
+#chimes-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.chime {
+  position: absolute;
+  width: 14px;
+  border-radius: 7px;
+  transform-origin: top center;
+  cursor: grab;
+  transition: background 0.4s;
+}
+
+#hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #888;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+
+#glow-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s;
+  background: radial-gradient(
+    ellipse at 50% 30%,
+    rgba(180,210,255,0.12) 0%,
+    transparent 70%
+  );
+}
+
+#rays-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
