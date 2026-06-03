@@ -37,11 +37,11 @@ const root        = document.getElementById('chimes-root');
  *   color – base CSS colour when at rest
  */
 const CHIME_DATA = [
-  { x: 0.28, len: 145, color: '#a0c4e8' },
-  { x: 0.37, len: 170, color: '#b8d4f0' },
-  { x: 0.46, len: 200, color: '#cce0f8' },
-  { x: 0.55, len: 170, color: '#b0cce8' },
-  { x: 0.64, len: 145, color: '#9abcdc' },
+  { x: 0.28, len: 145, color: '#73d247' },
+  { x: 0.37, len: 170, color: '#7dcf58' },
+  { x: 0.46, len: 200, color: '#79bc59' },
+  { x: 0.55, len: 170, color: '#7dc75b' },
+  { x: 0.64, len: 145, color: '#8cce6d' },
 ];
 
 /** px from the viewport top where all chimes hang from */
@@ -254,7 +254,7 @@ function tick() {
     const na    = a + vels[i];
     const speed = Math.abs(vels[i]);
 
-    lit[i]     = lit[i] * 0.98;                                  // slow decay; CSS transition smooths the fade-out visually
+    lit[i]     = lit[i] * 0.98; // slow decay; CSS transition smooths the fade-out visually
     ambient[i] = Math.min(1, ambient[i] * 0.97 + speed * 0.50); // slow ray glow, still speed-driven
 
     if (Math.abs(vels[i]) > 0.0005 || Math.abs(na) > 0.0005 ||
@@ -282,7 +282,7 @@ scene.addEventListener('click', e => {
   const mx = e.clientX - scene.getBoundingClientRect().left;
   CHIME_DATA.forEach((d, i) => {
     if (Math.abs(mx - d.x * W()) < 36) {
-      swing(i, (Math.random() - 0.5) * 0.06 + 0.04);
+      swing(i, (Math.random() - 0.1) * 0.06 + 0.04);
     }
   });
 });
