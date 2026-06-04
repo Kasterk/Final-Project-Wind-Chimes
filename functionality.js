@@ -37,11 +37,11 @@ const root        = document.getElementById('chimes-root');
  *   color – base CSS colour when at rest
  */
 const CHIME_DATA = [
-  { x: 0.28, len: 180, color: '#73d247' },
-  { x: 0.37, len: 190, color: '#7dcf58' },
-  { x: 0.46, len: 200, color: '#79bc59' },
-  { x: 0.55, len: 190, color: '#7dc75b' },
-  { x: 0.64, len: 180, color: '#8cce6d' },
+  { x: 0.28, len: 180, color: '#4e932f' },
+  { x: 0.37, len: 190, color: '#48832d' },
+  { x: 0.46, len: 200, color: '#5f9546' },
+  { x: 0.55, len: 190, color: '#52863a' },
+  { x: 0.64, len: 180, color: '#568441' },
 ];
 
 /** px from the viewport top where all chimes hang from */
@@ -137,7 +137,7 @@ function buildChimes() {
     str.style.cssText = `
       position: absolute;
       width: 1.5px;
-      background: #ccc;
+      background: #f3f3f3;
       height: ${d.len * 0.3}px;
       left: -0.75px;
       top: 0;
@@ -221,7 +221,7 @@ function drawRays() {
 
       const grad = ctx.createLinearGradient(0, 0, 0, -len);
       grad.addColorStop(0, `rgba(180,215,255, ${ambient[i] * 0.45})`);
-      grad.addColorStop(1,  'rgba(180,215,255, 0)');
+      grad.addColorStop(1,  'rgba(239, 246, 255, 0)');
 
       ctx.strokeStyle = grad;
       ctx.lineWidth   = 1.2;
@@ -268,7 +268,7 @@ function tick() {
   updatePositions();
   drawRays();
 
-  glowOverlay.style.opacity = ambient.some(a => a > 0.05) ? '1' : '0';
+  // glowOverlay.style.opacity = ambient.some(a => a > 0.05) ? '1' : '0';
 
   animId = anyActive ? requestAnimationFrame(tick) : null;
 }
