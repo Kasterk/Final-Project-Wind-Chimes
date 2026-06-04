@@ -37,11 +37,11 @@ const root        = document.getElementById('chimes-root');
  *   color – base CSS colour when at rest
  */
 const CHIME_DATA = [
-  { x: 0.28, len: 170, color: '#73d247' },
-  { x: 0.37, len: 185, color: '#7dcf58' },
+  { x: 0.28, len: 180, color: '#73d247' },
+  { x: 0.37, len: 190, color: '#7dcf58' },
   { x: 0.46, len: 200, color: '#79bc59' },
-  { x: 0.55, len: 185, color: '#7dc75b' },
-  { x: 0.64, len: 170, color: '#8cce6d' },
+  { x: 0.55, len: 190, color: '#7dc75b' },
+  { x: 0.64, len: 180, color: '#8cce6d' },
 ];
 
 /** px from the viewport top where all chimes hang from */
