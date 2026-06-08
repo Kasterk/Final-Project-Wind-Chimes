@@ -1,47 +1,13 @@
-/*
- * visuals.css — Wind Chime
- *
- * Styles the full-viewport scene and the chime elements built by JS.
- * No layout logic lives here; all positioning and transforms are applied
- * inline by functionality.js.
- *
- * Table of contents
- * ─────────────────
- *   1. Reset
- *   2. Body
- *   3. Scene (#scene)
- *   4. Chimes container (#chimes-root)
- *   5. Chime tube (.chime)
- *   6. Hint text (#hint)
- *   7. Ambient glow overlay (#glow-overlay)
- *   8. Ray canvas (#rays-canvas)
- */
+/* visuals.css — Wind Chime (Broken Glass Shards edition) */
 
-/* ── 1. Reset ──────────────────────────────────────────────────────────────── */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-/* ── 2. Body ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: #1e2124; 
+  background: #1a1c18;
   font-family: sans-serif;
   min-height: 100vh;
 }
 
-/* ── 3. Scene ──────────────────────────────────────────────────────────────── */
-
-/*
- * Fixed so it always fills the viewport regardless of document scroll.
- * overflow:visible lets chimes swing outside bounds without clipping.
- * pointer-events:auto ensures it catches all interaction.
- */
 #scene {
   position: fixed;
   inset: 0;
@@ -51,110 +17,157 @@ body {
   pointer-events: auto;
 }
 
-/* ── 4. Chimes container ───────────────────────────────────────────────────── */
+/* Wooden bar at the top */
+#top-bar {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 420px;
+  height: 18px;
+  background: linear-gradient(
+    to bottom,
+    #c8a96e 0%,
+    #a07840 40%,
+    #8a6530 70%,
+    #9b7540 100%
+  );
+  border-radius: 3px 3px 2px 2px;
+  box-shadow:
+    0 3px 12px rgba(0,0,0,0.6),
+    inset 0 1px 2px rgba(255,220,150,0.3),
+    inset 0 -1px 2px rgba(0,0,0,0.4);
+  pointer-events: none;
+  z-index: 10;
+}
 
-/*
- * touch-action:none prevents browser scroll/zoom gestures from
- * interfering with chime dragging on touch devices.
- */
+/* Wood grain lines */
+#top-bar::before {
+  content: '';
+  position: absolute;
+  inset: 3px 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 18px,
+    rgba(0,0,0,0.08) 18px,
+    rgba(0,0,0,0.08) 19px,
+    transparent 19px,
+    transparent 35px,
+    rgba(255,255,255,0.06) 35px,
+    rgba(255,255,255,0.06) 36px
+  );
+}
+
 #chimes-root {
   position: absolute;
   inset: 0;
   touch-action: none;
 }
 
-/* ── 5. Chime tube ─────────────────────────────────────────────────────────── */
-
-/*
- * The pill shape (border-radius: 7px on a 14px-wide element).
- * Position, height, background, and transform are set inline by JS.
- * transform-origin:top center makes rotation pivot at the hanging point.
- *
- * The glow effect is handled by a child .chime-glow overlay whose opacity
- * JS sets each frame. CSS transitions on opacity give a smooth fade-in/out
- * rather than an instant snap. This works because opacity is a first-class
- * animatable property — no @property registration needed.
- */
-.chime {
+/* Each strand wrapper — rotates as one unit */
+.strand-wrap {
   position: absolute;
-  width: 14px;
-  border-radius: 7px;
+  top: 0;
+  width: 0;
+  height: 0;
   transform-origin: top center;
-  cursor: grab;
-  overflow: hidden; /* clip the glow overlay to the pill shape */
 }
 
-/*
- * Full-size overlay inside each chime tube.
- * Renders the bright gradient + inner highlight that represents the glow.
- * opacity is written by JS each frame (0 = invisible, 1 = full glow).
- * transition:opacity gives the smooth fade-in on hit and fade-out at rest.
- */
-.chime-glow {
+/* The thin wire/string line for each strand */
+.strand-wire {
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.6s ease-out;
+  width: 1.5px;
+  left: -0.75px;
+  top: 46px; /* below the bar */
   background: linear-gradient(
-    to right,
-    hsl(162, 53%, 68%),
-    hsl(140, 100%, 95%),
-    hsl(161, 42%, 67%)
+    to bottom,
+    rgba(255,255,255,0.55),
+    rgba(255,255,255,0.15) 60%,
+    rgba(255,255,255,0.08)
   );
+  pointer-events: none;
+  transform-origin: top center;
+}
+
+/* Individual glass shard */
+.shard {
+  position: absolute;
+  left: 0;
+  transform-origin: center center;
+  pointer-events: none;
+  /* Base green glass look */
+  background: linear-gradient(
+    135deg,
+    rgba(80,160,60,0.75) 0%,
+    rgba(40,120,30,0.85) 35%,
+    rgba(20,90,15,0.90) 65%,
+    rgba(60,140,40,0.70) 100%
+  );
+  border: 1px solid rgba(120,200,80,0.35);
   box-shadow:
-    inset 0 0 18px rgba(244, 255, 246, 0.85),
-    0 0 22px rgba(221, 255, 243, 0.65),
-    0 0 48px rgba(199, 255, 223, 0.3);
-  }
+    inset 1px 1px 4px rgba(160,255,120,0.20),
+    inset -1px -1px 3px rgba(0,40,0,0.40),
+    0 1px 6px rgba(0,0,0,0.50);
+  /* clip-path set inline per shard for irregular shape */
+}
 
-/* ── 6. Hint text ──────────────────────────────────────────────────────────── */
+/* Warm fairy-light dot */
+.fairy-light {
+  position: absolute;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff9e0 0%, #ffe88a 40%, transparent 100%);
+  box-shadow:
+    0 0 4px 2px rgba(255,230,100,0.7),
+    0 0 10px 4px rgba(255,200,60,0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: opacity 0.4s ease-out;
+}
 
-/*
- * Centered at the bottom of the scene.
- * pointer-events:none so it never blocks chime interaction.
- * Faded to opacity:0 by JS on first interaction via transition.
- */
+/* Glow state on the shard when lit */
+.shard.lit {
+  box-shadow:
+    inset 1px 1px 4px rgba(200,255,160,0.50),
+    inset -1px -1px 3px rgba(0,60,0,0.30),
+    0 0 14px 4px rgba(140,255,80,0.45),
+    0 0 30px 8px rgba(100,220,60,0.20),
+    0 1px 6px rgba(0,0,0,0.30);
+  background: linear-gradient(
+    135deg,
+    rgba(120,220,80,0.85) 0%,
+    rgba(70,180,50,0.90) 35%,
+    rgba(40,140,25,0.92) 65%,
+    rgba(100,200,60,0.80) 100%
+  );
+}
+
+/* Hint */
 #hint {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 13px;
-  color: #d8d8d8;
+  letter-spacing: 0.08em;
+  color: rgba(180,220,140,0.40);
   pointer-events: none;
-  transition: opacity 0.5s;
+  transition: opacity 0.8s;
+  white-space: nowrap;
 }
 
-/* ── 7. Ambient glow overlay ───────────────────────────────────────────────── */
-
-/*
- * A radial gradient centred on the upper-middle of the scene.
- * opacity toggled between 0 and 1 by JS (with a 0.6s transition)
- * whenever any chime has significant motion.
- */
 #glow-overlay {
   position: absolute;
   inset: 0;
-  border-radius: 12px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.6s;
-  background: radial-gradient(
-    ellipse at 50% 30%,
-    rgba(180, 210, 255, 0.12) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(ellipse at 50% 20%, rgba(80,160,40,0.07) 0%, transparent 65%);
 }
 
-/* ── 8. Ray canvas ─────────────────────────────────────────────────────────── */
-
-/*
- * Overlaid on the scene at full size.
- * pointer-events:none so it never intercepts mouse/touch input.
- * Sized to match the scene via JS on resize.
- */
 #rays-canvas {
   position: absolute;
   inset: 0;

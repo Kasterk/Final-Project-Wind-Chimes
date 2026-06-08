@@ -1,25 +1,11 @@
 /**
- * Wind Chime — functionality.js
+ * Wind Chime — functionality.js (Green Glass Shards + Fairy Lights)
  *
- * Builds a set of animated, interactive wind chimes in the browser.
- * Each chime swings with a simple pendulum simulation and glows when active.
- * Users can click/drag individual chimes, or grab-drag the entire group.
- *
- * ── DOM elements ────────────────────────────────────────────────────────────
- *   #scene        – full-viewport container (click/drag target)
- *   #rays-canvas  – <canvas> for light-ray drawing
- *   #glow-overlay – ambient glow div shown when any chime is moving
- *   #chimes-root  – container for all generated chime elements
- *   #hint         – "touch or drag" hint that fades on first interaction
- *
- * ── Architecture ────────────────────────────────────────────────────────────
- *   1. buildChimes()  – creates DOM for each chime from CHIME_DATA
- *   2. tick()         – rAF loop: physics → DOM update → canvas draw
- *   3. Event handlers – click/drag on scene + group drag via chime grab
+ * Each strand has several irregular green glass shards + warm fairy-light dots.
+ * Only the touched strand swings and lights up. Plays a chime sound on touch.
  */
 
 // ── DOM references ───────────────────────────────────────────────────────────
-
 const scene       = document.getElementById('scene');
 const canvas      = document.getElementById('rays-canvas');
 const ctx         = canvas.getContext('2d');
@@ -27,204 +13,315 @@ const glowOverlay = document.getElementById('glow-overlay');
 const hint        = document.getElementById('hint');
 const root        = document.getElementById('chimes-root');
 
-// ── Chime definitions ────────────────────────────────────────────────────────
-
-/**
- * Each entry defines one chime tube.
- * @type {{ x: number, len: number, color: string }[]}
- *   x     – horizontal position as a fraction of scene width (0–1)
- *   len   – tube height in px
- *   color – base CSS colour when at rest
- */
-const CHIME_DATA = [
-  { x: 0.28, len: 180, color: '#4e932f' },
-  { x: 0.37, len: 190, color: '#48832d' },
-  { x: 0.46, len: 200, color: '#5f9546' },
-  { x: 0.55, len: 190, color: '#52863a' },
-  { x: 0.64, len: 180, color: '#568441' },
+// ── Strand definitions ───────────────────────────────────────────────────────
+// x = fraction of scene width; totalLen = wire length in px; note = Hz
+const STRAND_DATA = [
+  { x: 0.18, totalLen: 310, note: 1046.5 },
+  { x: 0.32, totalLen: 340, note:  880.0 },
+  { x: 0.46, totalLen: 360, note:  783.9 },
+  { x: 0.60, totalLen: 340, note:  698.5 },
+  { x: 0.74, totalLen: 310, note:  587.3 },
 ];
 
-/** px from the viewport top where all chimes hang from */
-const TOP_Y = 60;
+const TOP_Y = 46; // px: where the wire starts (just below bar)
+const REFLECTION_Y_OFFSET = 56; // px: push the ray/reflection origin further down
 
-// ── Per-chime state arrays (indexed parallel to CHIME_DATA) ─────────────────
+// Shard templates per strand — each is a list of shards.
+// Each shard: { yFrac, w, h, rot, clipPath }
+// yFrac = position along wire (0–1), rot = extra tilt in deg
+// We pre-define varied irregular polygon shapes using clip-path
+const SHARD_SHAPES = [
+  // shape 0 — wide trapezoid
+  'polygon(8% 0%, 92% 5%, 100% 100%, 0% 95%)',
+  // shape 1 — asymmetric quad
+  'polygon(0% 10%, 85% 0%, 100% 90%, 15% 100%)',
+  // shape 2 — chunky triangle-ish
+  'polygon(5% 0%, 100% 15%, 90% 100%, 0% 85%)',
+  // shape 3 — narrow shard
+  'polygon(20% 0%, 80% 5%, 75% 100%, 25% 95%)',
+  // shape 4 — broken corner shard
+  'polygon(0% 0%, 70% 5%, 100% 60%, 80% 100%, 10% 90%)',
+  // shape 5 — wide bottom
+  'polygon(15% 0%, 85% 0%, 100% 100%, 0% 95%)',
+  // shape 6 — angular shard
+  'polygon(0% 20%, 60% 0%, 100% 30%, 95% 100%, 5% 85%)',
+  // shape 7 — small square-ish
+  'polygon(5% 5%, 95% 0%, 100% 95%, 0% 100%)',
+];
 
-let angles  = CHIME_DATA.map(() => 0); // current swing angle (radians)
-let vels    = CHIME_DATA.map(() => 0); // angular velocity (radians/frame)
-let lit     = CHIME_DATA.map(() => 0); // triggered flash glow (0–1): set to 1 on hit, decays slowly; CSS transition on .chime-glow opacity gives smooth fade-in/out
-let ambient = CHIME_DATA.map(() => 0); // slower-decaying ray/bg glow (0–1)
+// Per-strand shard layout — each array entry defines shards for that strand
+// Format: [shapeIndex, yFrac, widthPx, heightPx, rotDeg, xOffsetPx]
+const STRAND_LAYOUTS = [
+  // strand 0
+  [
+    [4, 0.10, 48, 35, -8,  -10],
+    [1, 0.28, 42, 28,  5,    6],
+    [0, 0.46, 52, 32, -4,   -8],
+    [2, 0.63, 38, 30, 10,    4],
+    [5, 0.80, 44, 26, -6,   -6],
+  ],
+  // strand 1
+  [
+    [0, 0.08, 55, 36,  6,    8],
+    [3, 0.25, 30, 38, -10,  -4],
+    [6, 0.42, 46, 30,  4,    6],
+    [1, 0.59, 50, 34, -5,   -8],
+    [7, 0.74, 36, 28,  8,    2],
+    [2, 0.88, 42, 24, -3,    4],
+  ],
+  // strand 2
+  [
+    [2, 0.07, 60, 40, -5,  -12],
+    [5, 0.23, 44, 30,  8,    6],
+    [0, 0.39, 54, 36, -3,  -10],
+    [4, 0.54, 48, 32,  6,    8],
+    [1, 0.68, 50, 28, -8,   -4],
+    [6, 0.82, 40, 30,  4,    4],
+    [3, 0.93, 30, 22, -6,   -2],
+  ],
+  // strand 3
+  [
+    [1, 0.09, 52, 34,  7,    4],
+    [4, 0.26, 46, 32, -6,   -8],
+    [6, 0.43, 50, 36,  4,    6],
+    [0, 0.59, 42, 28, -9,   -6],
+    [3, 0.74, 34, 38,  5,    2],
+    [5, 0.87, 44, 26, -4,    8],
+  ],
+  // strand 4
+  [
+    [5, 0.11, 50, 32, -7,   -6],
+    [2, 0.28, 40, 30,  6,    4],
+    [1, 0.45, 46, 34, -4,   -8],
+    [0, 0.62, 52, 28,  8,    6],
+    [7, 0.78, 32, 26, -5,    0],
+  ],
+];
 
-// ── Physics constants ────────────────────────────────────────────────────────
+// Fairy light y positions (as fraction of totalLen) for each strand
+const FAIRY_LIGHTS = [
+  [0.05, 0.22, 0.42, 0.65, 0.85],
+  [0.04, 0.18, 0.36, 0.55, 0.73, 0.90],
+  [0.04, 0.16, 0.33, 0.50, 0.66, 0.80, 0.94],
+  [0.05, 0.20, 0.38, 0.57, 0.74, 0.89],
+  [0.06, 0.24, 0.44, 0.64, 0.82],
+];
 
-const GRAVITY  = 0.12; // gravitational pull strength
-const DAMPING  = 0.96; // velocity multiplier per frame (< 1 = friction)
-const RESTORE  = 0.05; // spring-like pull back to vertical
+// ── Per-strand physics state ─────────────────────────────────────────────────
+let angles  = STRAND_DATA.map(() => 0);
+let vels    = STRAND_DATA.map(() => 0);
+let lit     = STRAND_DATA.map(() => 0); // 0–1 glow, only on touched strand
+
+const GRAVITY = 0.09;
+const DAMPING = 0.97;
+const RESTORE = 0.035;
 
 // ── Misc state ───────────────────────────────────────────────────────────────
-
-let chimeEls  = [];   // [{ wrap: HTMLElement, chime: HTMLElement }, ...]
-let animId    = null; // rAF handle; null when animation is idle
+let strandEls  = []; // [{ wrap, wire, shards:[], lights:[] }, ...]
+let animId     = null;
 let hintHidden = false;
 
-// Group-drag state (dragging all chimes together horizontally)
-let groupX = 0, groupY = 0;
-let isGrabbing     = false;
-let activeGrabEl   = null;
-let grabPointerId  = null;
+let groupX = 0;
+let isGrabbing    = false;
+let activeGrabEl  = null;
+let grabPointerId = null;
 const grabStart  = { x: 0, y: 0 };
 const groupStart = { x: 0, y: 0 };
 
-// Individual-chime drag state
-let dragging = null; // index of chime being individually dragged, or null
-let lastDx   = 0;   // previous pointer x used to compute drag delta
+let dragging = null;
+let lastDx   = 0;
+
+// ── Audio ────────────────────────────────────────────────────────────────────
+let audioCtx = null;
+const audioEl = document.getElementById && document.getElementById('chime-audio');
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playChime(freq) {
+  const ac  = getAudio();
+  const now = ac.currentTime;
+
+  const masterGain = ac.createGain();
+  masterGain.gain.setValueAtTime(0, now);
+  masterGain.gain.linearRampToValueAtTime(0.25, now + 0.008);
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 3.5);
+  masterGain.connect(ac.destination);
+
+  const delay  = ac.createDelay(0.5);
+  const fbGain = ac.createGain();
+  delay.delayTime.value = 0.20;
+  fbGain.gain.value     = 0.15;
+  delay.connect(fbGain);
+  fbGain.connect(delay);
+  delay.connect(masterGain);
+
+  [[freq, 1.0], [freq * 2.001, 0.15]].forEach(([f, vol]) => {
+    const osc  = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(vol, now);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    gain.connect(delay);
+    osc.start(now);
+    osc.stop(now + 4);
+  });
+}
+
+// Try playing a user-provided audio file (e.g., chime.mp4 placed next to the app).
+// Returns true if a sample was played, false otherwise.
+function playChimeSample() {
+  try {
+    if (audioEl && audioEl.src) {
+      const clone = audioEl.cloneNode(true);
+      clone.volume = 0.7;
+      clone.play().catch(() => {});
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Current scene width in px */
 const W = () => scene.offsetWidth;
-/** Current scene height in px */
 const H = () => scene.offsetHeight;
 
-/** Sync canvas size to scene size (call on resize) */
 function resize() {
   canvas.width  = W();
   canvas.height = H();
 }
 
-/** Fade out and suppress the hint text on first user interaction */
 function hideHint() {
-  if (!hintHidden) {
-    hint.style.opacity = '0';
-    hintHidden = true;
-  }
+  if (!hintHidden) { hint.style.opacity = '0'; hintHidden = true; }
 }
 
-/** Start the animation loop if it isn't already running */
 function wake() {
   if (!animId) animId = requestAnimationFrame(tick);
 }
 
-/**
- * Add a velocity impulse to one chime, starting the animation loop.
- * @param {number} i     – chime index
- * @param {number} force – angular velocity delta
- */
 function swing(i, force) {
   vels[i] += force;
-  lit[i]   = 1;      // trigger the flash — decays on its own from here
+  lit[i]   = 1;
+  if (!playChimeSample()) playChime(STRAND_DATA[i].note);
   hideHint();
   wake();
 }
 
-// ── DOM construction ──────────────────────────────────────────────────────────
-
-/**
- * (Re-)build all chime elements from CHIME_DATA and append them to #chimes-root.
- * Each chime consists of:
- *   wrap  – an absolutely-positioned container rotated around its top centre
- *   str   – a thin vertical "string" div
- *   chime – the tube itself (has pointer-event handlers for group drag)
- */
+// ── Build DOM ─────────────────────────────────────────────────────────────────
 function buildChimes() {
   root.innerHTML = '';
-  chimeEls = [];
+  strandEls = [];
 
-  CHIME_DATA.forEach((d, i) => {
+  STRAND_DATA.forEach((d, si) => {
     const wrap = document.createElement('div');
-    wrap.style.cssText = `position:absolute; top:${TOP_Y}px; left:0; width:0; height:0;`;
+    wrap.className = 'strand-wrap';
+    wrap.style.cssText = `position:absolute; top:0; left:0; width:0; height:0;`;
 
-    const str = document.createElement('div');
-    str.style.cssText = `
-      position: absolute;
-      width: 1.5px;
-      background: #f3f3f3;
-      height: ${d.len * 0.3}px;
-      left: -0.75px;
-      top: 0;
-      transform-origin: top center;
-    `;
+    // Wire
+    const wire = document.createElement('div');
+    wire.className = 'strand-wire';
+    wire.style.height = `${d.totalLen}px`;
+    wrap.appendChild(wire);
 
-    const chime = document.createElement('div');
-    chime.className = 'chime';
-    chime.style.cssText = `width:14px; height:${d.len}px; background:${d.color}; left:-7px; top:${d.len * 0.3}px;`;
-    chime.dataset.i = i;
+    // Shards
+    const shards = [];
+    (STRAND_LAYOUTS[si] || []).forEach(([shapeIdx, yFrac, w, h, rot, xOff]) => {
+      const shard = document.createElement('div');
+      shard.className = 'shard';
+      const yPx = TOP_Y + yFrac * d.totalLen;
+      shard.style.cssText = `
+        width: ${w}px;
+        height: ${h}px;
+        top: ${yPx}px;
+        left: ${xOff - w / 2}px;
+        transform: rotate(${rot}deg);
+        clip-path: ${SHARD_SHAPES[shapeIdx]};
+        transition: box-shadow 0.4s ease-out, background 0.4s ease-out;
+      `;
+      wrap.appendChild(shard);
+      shards.push(shard);
+    });
 
-    // Inner glow layer: a full-size child whose opacity is driven by --glow.
-    // CSS transitions on opacity give the smooth fade-in/out.
-    const glow = document.createElement('div');
-    glow.className = 'chime-glow';
+    // Fairy lights
+    const lights = [];
+    (FAIRY_LIGHTS[si] || []).forEach(yFrac => {
+      const dot = document.createElement('div');
+      dot.className = 'fairy-light';
+      const yPx = TOP_Y + yFrac * d.totalLen;
+      dot.style.top  = `${yPx}px`;
+      dot.style.left = '0px';
+      wrap.appendChild(dot);
+      lights.push(dot);
+    });
 
-    chime.appendChild(glow);
+    // Grab handler on wire (group drag)
+    wire.style.pointerEvents = 'auto';
+    wire.style.cursor = 'grab';
+    wire.addEventListener('pointerdown',   e => onGrabDown(e, wire));
+    wire.addEventListener('pointerup',     e => onGrabUp(e));
+    wire.addEventListener('pointercancel', e => onGrabUp(e));
 
-    // Attach group-drag handlers to each tube
-    chime.addEventListener('pointerdown',  e => onChimePointerDown(e, chime));
-    chime.addEventListener('pointerup',    e => onChimePointerUp(e));
-    chime.addEventListener('pointercancel',e => onChimePointerUp(e));
-
-    wrap.appendChild(str);
-    wrap.appendChild(chime);
     root.appendChild(wrap);
-    chimeEls.push({ wrap, chime, glow });
+    strandEls.push({ wrap, wire, shards, lights });
   });
 
   updatePositions();
 }
 
-// ── Animation: positions and visuals ─────────────────────────────────────────
-
-/**
- * Apply the current angles and glow values to every chime's DOM element.
- * Called once per animation frame.
- *
- * Glow is applied by setting opacity on the .chime-glow child overlay rather
- * than overriding background/boxShadow directly. This lets the CSS
- * `transition: opacity` handle smooth fade-in and fade-out automatically —
- * JS only needs to write a number; the browser interpolates the visual.
- */
+// ── Animation ─────────────────────────────────────────────────────────────────
 function updatePositions() {
   const w = W();
-  CHIME_DATA.forEach((d, i) => {
-    const el = chimeEls[i];
+  STRAND_DATA.forEach((d, i) => {
+    const el = strandEls[i];
     if (!el) return;
 
     el.wrap.style.left      = `${d.x * w}px`;
     el.wrap.style.top       = `${TOP_Y}px`;
     el.wrap.style.transform = `rotate(${angles[i]}rad)`;
 
-    // Set opacity on the inner glow overlay — CSS transition handles the fade.
-    el.glow.style.opacity = lit[i].toFixed(3);
+    // Light up shards only on the touched strand
+    const glowing = lit[i] > 0.05;
+    el.shards.forEach(s => {
+      if (glowing) {
+        s.classList.add('lit');
+      } else {
+        s.classList.remove('lit');
+      }
+    });
+
+    // Fairy lights are visible only while the strand is lit (touched)
+    el.lights.forEach(dot => {
+      dot.style.opacity = glowing ? (0.6 + lit[i] * 0.4).toFixed(2) : '0';
+    });
   });
 }
 
-/**
- * Draw light rays emanating from each active chime's tip onto the canvas.
- * Each chime emits 4 fanned rays whose opacity scales with its ambient glow.
- */
 function drawRays() {
   const w = W(), h = H();
   ctx.clearRect(0, 0, w, h);
 
-  CHIME_DATA.forEach((d, i) => {
-    if (ambient[i] < 0.03) return;
+  STRAND_DATA.forEach((d, i) => {
+    if (lit[i] < 0.05) return;
 
     const a    = angles[i];
-    const tipX = d.x * w + Math.sin(a) * (d.len * 1.3 + TOP_Y);
-    const tipY = TOP_Y  + Math.cos(a) * (d.len * 1.3 + TOP_Y * 0.5);
+    const tipX = d.x * w + Math.sin(a) * (d.totalLen + TOP_Y);
+    const tipY = TOP_Y   + Math.cos(a) * (d.totalLen + TOP_Y * 0.5) + REFLECTION_Y_OFFSET;
 
-    for (let r = 0; r < 4; r++) {
-      const spread = (r / 3 - 0.5) * 0.8;
-      const len    = 50 + r * 15;
-
+    for (let r = 0; r < 3; r++) {
+      const spread = (r / 2 - 0.5) * 0.5;
+      const len    = 35 + r * 10;
       ctx.save();
       ctx.translate(tipX, tipY);
-      ctx.rotate(spread);
-
+      // rotate the rays opposite the chime angle so they mirror the motion
+      ctx.rotate(-a + spread);
       const grad = ctx.createLinearGradient(0, 0, 0, -len);
-      grad.addColorStop(0, `rgba(180,215,255, ${ambient[i] * 0.45})`);
-      grad.addColorStop(1,  'rgba(239, 246, 255, 0)');
-
+      grad.addColorStop(0, `rgba(140,255,100, ${lit[i] * 0.40})`);
+      grad.addColorStop(1,  'rgba(140,255,100, 0)');
       ctx.strokeStyle = grad;
-      ctx.lineWidth   = 1.2;
+      ctx.lineWidth   = 1;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(0, -len);
@@ -234,91 +331,59 @@ function drawRays() {
   });
 }
 
-// ── Animation loop ────────────────────────────────────────────────────────────
-
-/**
- * Single animation frame:
- *   1. Advance pendulum physics for every chime.
- *   2. Update glow values from current speed.
- *   3. Push changes to DOM and canvas.
- *   4. Schedule next frame only if anything is still moving/glowing.
- */
 function tick() {
   let anyActive = false;
 
   angles = angles.map((a, i) => {
-    // Pendulum: restoring torque + gravity + damping
     vels[i] += -RESTORE * a - GRAVITY * Math.sin(a);
     vels[i] *= DAMPING;
+    const na = a + vels[i];
 
-    const na    = a + vels[i];
-    const speed = Math.abs(vels[i]);
+    lit[i] = lit[i] * 0.975;
 
-    lit[i]     = lit[i] * 0.98; // slow decay; CSS transition smooths the fade-out visually
-    ambient[i] = Math.min(1, ambient[i] * 0.97 + speed * 0.50); // slow ray glow, still speed-driven
-
-    if (Math.abs(vels[i]) > 0.0005 || Math.abs(na) > 0.0005 ||
-        lit[i] > 0.01 || ambient[i] > 0.01) {
+    if (Math.abs(vels[i]) > 0.0005 || Math.abs(na) > 0.0005 || lit[i] > 0.01) {
       anyActive = true;
     }
-
     return na;
   });
 
   updatePositions();
   drawRays();
 
-  // glowOverlay.style.opacity = ambient.some(a => a > 0.05) ? '1' : '0';
-
   animId = anyActive ? requestAnimationFrame(tick) : null;
 }
 
-// ── Event handlers ────────────────────────────────────────────────────────────
-
-/**
- * Click anywhere on the scene: swing every chime within ~36px of the click.
- */
+// ── Events ────────────────────────────────────────────────────────────────────
 scene.addEventListener('click', e => {
   const mx = e.clientX - scene.getBoundingClientRect().left;
-  CHIME_DATA.forEach((d, i) => {
-    if (Math.abs(mx - d.x * W()) < 36) {
-      swing(i, (Math.random() - 0.1) * 0.06 + 0.04);
-    }
+  let closest = -1, minDist = Infinity;
+  STRAND_DATA.forEach((d, i) => {
+    const dist = Math.abs(mx - d.x * W());
+    if (dist < 55 && dist < minDist) { minDist = dist; closest = i; }
   });
+  if (closest !== -1) swing(closest, (Math.random() - 0.1) * 0.05 + 0.03);
 });
 
-/**
- * Pointer-down on scene: start individual-chime drag if pointer lands near one.
- */
 scene.addEventListener('pointerdown', e => {
   const mx = e.clientX - scene.getBoundingClientRect().left;
-  CHIME_DATA.forEach((d, i) => {
-    if (Math.abs(mx - d.x * W()) < 28) {
-      dragging = i;
-      lastDx   = mx;
-      lit[i]   = 1;
-      hideHint();
-    }
+  let closest = -1, minDist = Infinity;
+  STRAND_DATA.forEach((d, i) => {
+    const dist = Math.abs(mx - d.x * W());
+    if (dist < 40 && dist < minDist) { minDist = dist; closest = i; }
   });
+  if (closest !== -1) { dragging = closest; lastDx = mx; hideHint(); }
 });
 
-/**
- * Pointer-move on scene:
- *   - If a group-grab is active, translate the whole chimes root.
- *   - Otherwise, apply velocity to the individually dragged chime.
- */
 scene.addEventListener('pointermove', e => {
   if (isGrabbing && e.pointerId === grabPointerId) {
     groupX = groupStart.x + (e.clientX - grabStart.x);
-    root.style.transform        = `translateX(${groupX}px)`;
-    canvas.style.transform      = `translateX(${groupX}px)`;
-    glowOverlay.style.transform = `translateX(${groupX}px)`;
+    root.style.transform   = `translateX(${groupX}px)`;
+    canvas.style.transform = `translateX(${groupX}px)`;
     return;
   }
-
   if (dragging === null) return;
-  const mx     = e.clientX - scene.getBoundingClientRect().left;
-  vels[dragging] += (mx - lastDx) / W() * 0.15;
+  const mx = e.clientX - scene.getBoundingClientRect().left;
+  vels[dragging] += (mx - lastDx) / W() * 0.12;
   lastDx = mx;
   wake();
 });
@@ -326,46 +391,32 @@ scene.addEventListener('pointermove', e => {
 scene.addEventListener('pointerup',    () => { dragging = null; });
 scene.addEventListener('pointerleave', () => { dragging = null; });
 
-/**
- * Pointer-down on a chime tube: begin group-drag (moves all chimes together).
- * @param {PointerEvent} e
- * @param {HTMLElement}  chime – the element that received the event
- */
-function onChimePointerDown(e, chime) {
+function onGrabDown(e, el) {
   e.stopPropagation();
   isGrabbing    = true;
-  activeGrabEl  = chime;
+  activeGrabEl  = el;
   grabPointerId = e.pointerId;
   grabStart.x   = e.clientX;
-  grabStart.y   = e.clientY;
   groupStart.x  = groupX;
-  groupStart.y  = groupY;
-  chime.setPointerCapture(e.pointerId);
-  chime.style.cursor = 'grabbing';
+  el.setPointerCapture(e.pointerId);
+  el.style.cursor = 'grabbing';
   hideHint();
 }
 
-/**
- * Pointer-up / cancel on a chime tube: end group-drag.
- * @param {PointerEvent} e
- */
-function onChimePointerUp(e) {
+function onGrabUp(e) {
   if (!isGrabbing || e.pointerId !== grabPointerId) return;
   isGrabbing = false;
   try { activeGrabEl.releasePointerCapture(e.pointerId); } catch (_) {}
   activeGrabEl.style.cursor = 'grab';
-  activeGrabEl  = null;
+  activeGrabEl = null;
   grabPointerId = null;
 }
 
-// Ensure grab releases even if the pointer leaves the element
-window.addEventListener('pointerup',     onChimePointerUp);
-window.addEventListener('pointercancel', onChimePointerUp);
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-
+window.addEventListener('pointerup',     onGrabUp);
+window.addEventListener('pointercancel', onGrabUp);
 window.addEventListener('resize', () => { resize(); updatePositions(); });
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 resize();
 buildChimes();
 wake();
