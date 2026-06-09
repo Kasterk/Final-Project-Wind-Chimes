@@ -138,7 +138,6 @@ function getAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
 function playChime(freq) {
   const ac  = getAudio();
   const now = ac.currentTime;
@@ -170,15 +169,112 @@ function playChime(freq) {
     osc.stop(now + 4);
   });
 }
+// Sample playback management
+let currentSample = null; // { elem, srcNode, gain }
+let fadeTimer = null;
+const SAMPLE_START = 2; // seconds
+const INACTIVITY_MS = 4000; // fade delay when no active chime
+const FADE_SEC = 2.0; // fade duration (slow fade)
 
-// Try playing a user-provided audio file (e.g., chime.mp4 placed next to the app).
-// Returns true if a sample was played, false otherwise.
+function startSamplePlayback() {
+  if (!audioEl || !audioEl.src) return false;
+  if (currentSample) return true; // already playing
+
+  const clone = audioEl.cloneNode(true);
+  clone.crossOrigin = 'anonymous';
+  const ac = getAudio();
+  const src = ac.createMediaElementSource(clone);
+  const gain = ac.createGain();
+  gain.gain.value = 0.0001; // start nearly silent, ramp up when playing
+  src.connect(gain);
+  gain.connect(ac.destination);
+
+  const tryStart = () => {
+    try {
+      if (!isNaN(clone.duration) && clone.duration > SAMPLE_START) {
+        clone.currentTime = SAMPLE_START;
+      }
+    } catch (e) {}
+    clone.play().catch(() => {});
+    // ramp to target volume quickly
+    const now = ac.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.7, now + 0.01);
+  };
+
+  if (clone.readyState >= 2) tryStart();
+  else {
+    clone.addEventListener('loadedmetadata', tryStart, { once: true });
+    clone.load();
+  }
+
+  clone.addEventListener('ended', () => {
+    // clean up when natural end occurs
+    stopSampleImmediate();
+  }, { once: true });
+
+  currentSample = { elem: clone, srcNode: src, gain };
+  return true;
+}
+
+function stopSampleImmediate() {
+  if (!currentSample) return;
+  try {
+    currentSample.elem.pause();
+  } catch (e) {}
+  try { currentSample.srcNode.disconnect(); } catch (e) {}
+  try { currentSample.gain.disconnect(); } catch (e) {}
+  try { currentSample.elem.remove(); } catch (e) {}
+  currentSample = null;
+  if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+}
+
+function scheduleFadeOut(immediate = false) {
+  if (!currentSample) return;
+  if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+  const doFade = () => {
+    const ac = getAudio();
+    const now = ac.currentTime;
+    try {
+      currentSample.gain.gain.cancelScheduledValues(now);
+      // set current value as starting point
+      currentSample.gain.gain.setValueAtTime(currentSample.gain.gain.value, now);
+      currentSample.gain.gain.linearRampToValueAtTime(0.0001, now + FADE_SEC);
+    } catch (e) {}
+    setTimeout(() => stopSampleImmediate(), FADE_SEC * 1000 + 50);
+  };
+
+  // If immediate, hold playback for 1s (1000ms) then fade slowly; otherwise use INACTIVITY_MS
+  const holdMs = immediate ? 1000 : INACTIVITY_MS;
+  fadeTimer = setTimeout(() => { doFade(); fadeTimer = null; }, holdMs);
+}
+
+function cancelFadeAndEnsurePlaying() {
+  if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+  if (!currentSample) return;
+  const ac = getAudio();
+  const now = ac.currentTime;
+  try {
+    currentSample.gain.gain.cancelScheduledValues(now);
+    currentSample.gain.gain.setValueAtTime(currentSample.gain.gain.value, now);
+    currentSample.gain.gain.linearRampToValueAtTime(0.7, now + 0.02);
+  } catch (e) {}
+}
+
 function playChimeSample() {
   try {
-    if (audioEl && audioEl.src) {
-      const clone = audioEl.cloneNode(true);
-      clone.volume = 0.7;
-      clone.play().catch(() => {});
+    if (!audioEl || !audioEl.src) return false;
+    // if already playing, don't restart
+    if (currentSample) {
+      // ensure it stays audible and cancel any fade
+      cancelFadeAndEnsurePlaying();
+      return true;
+    }
+    const started = startSamplePlayback();
+    if (started) {
+      // attach element to DOM so cloned audio can play on some browsers
+      document.body.appendChild(currentSample.elem);
       return true;
     }
   } catch (e) {}
@@ -346,6 +442,19 @@ function tick() {
     }
     return na;
   });
+
+  // Manage sample playback: keep sample playing while any strand is lit,
+  // otherwise schedule fade-out after inactivity.
+  const anyLitActive = lit.some(v => v > 0.05);
+  if (anyLitActive) {
+    // ensure sample is playing and cancel any scheduled fade
+    if (audioEl && audioEl.src) {
+      playChimeSample();
+    }
+  } else {
+    // fade out immediately when lights go off
+    if (currentSample) scheduleFadeOut(true);
+  }
 
   updatePositions();
   drawRays();
